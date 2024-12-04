@@ -124,6 +124,7 @@ type Schema struct {
 	Deprecated           bool                `yaml:"deprecated,omitempty"`
 	Extensions           map[string]any      `yaml:",inline"`
 	DependentRequired    map[string][]string `yaml:"dependentRequired,omitempty"`
+	DependentMatches     map[string][]string `yaml:"dependentMatches,omitempty"`
 
 	OneOf []*Schema `yaml:"oneOf,omitempty"`
 	AnyOf []*Schema `yaml:"anyOf,omitempty"`
@@ -155,6 +156,7 @@ type Schema struct {
 	msgMaxProperties     string                       `yaml:"-"`
 	msgRequired          map[string]string            `yaml:"-"`
 	msgDependentRequired map[string]map[string]string `yaml:"-"`
+	msgDependentMatches  map[string]map[string]string `yaml:"-"`
 }
 
 // MarshalJSON marshals the schema into JSON, respecting the `Extensions` map
@@ -212,6 +214,7 @@ func (s *Schema) MarshalJSON() ([]byte, error) {
 		{"uniqueItems", s.UniqueItems, omitEmpty},
 		{"required", s.Required, omitEmpty},
 		{"dependentRequired", s.DependentRequired, omitEmpty},
+		{"dependentMatches", s.DependentMatches, omitEmpty},
 		{"minProperties", s.MinProperties, omitEmpty},
 		{"maxProperties", s.MaxProperties, omitEmpty},
 		{"readOnly", s.ReadOnly, omitEmpty},
@@ -292,6 +295,18 @@ func (s *Schema) PrecomputeMessages() {
 					s.msgDependentRequired[name] = map[string]string{}
 				}
 				s.msgDependentRequired[name][dependent] = ErrorFormatter(validation.MsgExpectedDependentRequiredProperty, dependent, name)
+			}
+		}
+
+		if s.msgDependentMatches == nil {
+			s.msgDependentMatches = map[string]map[string]string{}
+		}
+		for name, dependents := range s.DependentMatches {
+			for _, dependent := range dependents {
+				if s.msgDependentMatches[name] == nil {
+					s.msgDependentMatches[name] = map[string]string{}
+				}
+				s.msgDependentMatches[name][dependent] = ErrorFormatter(validation.MsgExpectedDependentMatchProperty, name, dependent)
 			}
 		}
 	}
@@ -804,6 +819,7 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 		fieldSet := map[string]struct{}{}
 		props := map[string]*Schema{}
 		dependentRequiredMap := map[string][]string{}
+		dependentMatchesMap := map[string][]string{}
 		for _, info := range getFields(t, make(map[reflect.Type]struct{})) {
 			f := info.Field
 
@@ -840,6 +856,10 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 
 			if dr := f.Tag.Get("dependentRequired"); strings.TrimSpace(dr) != "" {
 				dependentRequiredMap[name] = strings.Split(dr, ",")
+			}
+
+			if de := f.Tag.Get("dependentMatches"); strings.TrimSpace(de) != "" {
+				dependentMatchesMap[name] = strings.Split(de, ",")
 			}
 
 			fs := SchemaFromField(r, f, t.Name()+f.Name+"Struct")
@@ -887,6 +907,24 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 			panic(errors.New(strings.Join(errs, "; ")))
 		}
 
+		// Check if the dependent field matches the other field value. If they don't, panic with the correct message.
+		errs = nil
+		for field, matches := range dependentMatchesMap {
+			for _, match := range matches {
+				if _, ok := props[field]; !ok {
+					errs = append(errs, fmt.Sprintf("dependent field '%s' for field '%s' does not exist", field, match))
+					continue
+				}
+				if _, ok := props[match]; !ok {
+					errs = append(errs, fmt.Sprintf("dependent field '%s' for field '%s' does not exist", match, field))
+					continue
+				}
+			}
+		}
+		if errs != nil {
+			panic(errors.New(strings.Join(errs, "; ")))
+		}
+
 		additionalProps := false
 		if f, ok := t.FieldByName("_"); ok {
 			if _, ok = f.Tag.Lookup("additionalProperties"); ok {
@@ -904,6 +942,7 @@ func schemaFromType(r Registry, t reflect.Type) *Schema {
 		s.propertyNames = propNames
 		s.Required = required
 		s.DependentRequired = dependentRequiredMap
+		s.DependentMatches = dependentMatchesMap
 		s.requiredMap = requiredMap
 		s.PrecomputeMessages()
 	case reflect.Interface:

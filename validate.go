@@ -658,6 +658,16 @@ func handleMapString(r Registry, s *Schema, path *PathBuffer, mode ValidateMode,
 			}
 		}
 
+		if m[actualKey] != nil && s.DependentMatches[k] != nil {
+			for _, dependent := range s.DependentMatches[k] {
+				if m[dependent] == m[actualKey] {
+					continue
+				}
+
+				res.Add(path, m, s.msgDependentMatches[k][dependent])
+			}
+		}
+
 		path.Push(k)
 		Validate(r, v, path, mode, m[actualKey], res)
 		path.Pop()
@@ -759,6 +769,16 @@ func handleMapAny(r Registry, s *Schema, path *PathBuffer, mode ValidateMode, m 
 				}
 
 				res.Add(path, m, s.msgDependentRequired[k][dependent])
+			}
+		}
+
+		if m[k] != nil && s.DependentMatches[k] != nil {
+			for _, dependent := range s.DependentMatches[k] {
+				if m[dependent] != nil {
+					continue
+				}
+
+				res.Add(path, m, s.msgDependentMatches[k][dependent])
 			}
 		}
 

@@ -1190,6 +1190,24 @@ var validateTests = []struct {
 		},
 	},
 	{
+		name: "dependentMatches field success",
+		typ: reflect.TypeOf(struct {
+			Field1 string `json:"field1"`
+			Field2 string `json:"field2" dependentMatches:"field1"`
+		}{}),
+		input: map[string]any{"field1": "abc", "field2": "abc"},
+		errs:  nil,
+	},
+	{
+		name: "dependentMatches field failure",
+		typ: reflect.TypeOf(struct {
+			Field1 string `json:"field1"`
+			Field2 string `json:"field2" dependentMatches:"field1"`
+		}{}),
+		input: map[string]any{"field1": "abc", "field2": "def"},
+		errs:  []string{"expected field2 to match field1"},
+	},
+	{
 		name: "oneOf success bool",
 		s: &huma.Schema{
 			OneOf: []*huma.Schema{

@@ -44,4 +44,5 @@ var (
 	MsgExpectedMaxProperties              = "expected object with at most %d properties"
 	MsgExpectedRequiredProperty           = "expected required property %s to be present"
 	MsgExpectedDependentRequiredProperty  = "expected property %s to be present when %s is present"
+	MsgExpectedDependentMatchProperty     = "expected %s to match %s"
 )
